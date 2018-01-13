@@ -122,3 +122,112 @@ stored.
 ARCHIVES="$HOME/original_configs"
 ```
 
+## Networking: Static vs. Dynamic
+You should be fine with a dynamically assigned IP address. Acitve Directory is
+heavily dependent upon DNS. This of course assumes that your DHCP server
+correctly updates the DNS server. Configuration of network settings is beyond
+the scope of this guide, so if you need help, please review the official
+documentation. That said, you should ensure that your DNS servers correctly
+resolve the Active Directory records. The check is easy.
+
+```
+dig -t srv _ldap._tcp.$DOMAIN
+```
+
+The above command will return a list of all the IP addresses for all of your
+domain controllers. If it doesn't, then you need to fix your DNS before
+proceeding any further.
+
+## Create Some Directories
+Let's go ahead and create our directories.
+
+```
+# Folder to archive original configuration files.
+mkdir -P $ARCHIVES
+
+# Make a directory for samba
+sudo mkdir -p /srv/samba/users
+```
+
+
+## Change the Hostname
+
+There is no requirement for you to change the hostname. But this is probably
+the time to do so, if you want to do so.
+
+```
+sudo hostnamectl set-hostname "$MACHINE_NAME\.$DOMAIN"
+```
+
+
+## Modify /etc/hosts
+We really don't know why, but we ran accross quite a bit of advice to make
+the following modification to /etc/hosts. Apparently, it has something to do
+with properly registering the machine in DNS, but it doesn't make sense to us.
+Nevertheless, we have chosen to follow the advice, because it doesn't hurt
+anything, and especially if we have changed the name, it will allow our machine
+to correctly address itself.
+
+```
+sudo sed -i \
+-e "s|^127\.0\.1\.1.*|127\.0\.1\.1       $MACHINE_NAME\.$DOMAIN $MACHINE_NAME|" \
+/etc/hosts
+```
+
+## Install Packages
+We don't need to select much.
+
+```
+sudo apt update && sudo apt upgrade
+
+sudo apt -y install \
+acl \
+krb5-user \
+libwbclient-sssd \
+ntp \
+ntpdate \
+samba \
+smbclient \
+sssd \
+sssd-tools \
+```
+
+## Stop Services
+We should go ahead and stop any of the services we just installed that are
+running.
+
+```
+sudo service ntp stop
+sudo service smbd stop
+sudo service nmbd stop
+```
+You won't have to worry about stopping SSSD. It won't run if everything isn't
+just so.
+
+
+## Delete Samba Databases
+The following commands delete the database files where they are
+likely to be found. Ignore complaints that files cannot be found. That is a
+good thing.
+
+```
+sudo rm /var/lib/samba/*.tdb
+sudo rm /var/lib/samba/*.ldb
+sudo rm /var/run/samba/*.tdb
+sudo rm /var/run/samba/*.ldb
+sudo rm /var/cache/samba/*.tdb
+sudo rm /var/cache/samba/*.ldb
+sudo rm /var/lib/private/samba/*.tdb
+sudo rm /var/lib/private/samba/*.ldb
+```
+
+
+
+
+
+
+
+
+
+
+
