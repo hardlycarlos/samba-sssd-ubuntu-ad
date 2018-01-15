@@ -153,7 +153,7 @@ sudo mkdir -p /srv/samba/users
 ## Change the Hostname
 
 There is no requirement for you to change the hostname. But this is probably
-the time to do so, if you want to do so.
+the time to do so, if you want.
 
 ```
 sudo hostnamectl set-hostname "$MACHINE_NAME\.$DOMAIN"
@@ -193,22 +193,26 @@ sssd-tools \
 ```
 
 ## Stop Services
-We should go ahead and stop any of the services we just installed that are
-running.
+Once we have Samba correctly configured, we want it to start up from as fresh a
+state as possible. That means we are also goingt to delete its databases. It
+makes sense to go ahead and shut it down.
+
+We are also going to configure NTP and perform a realtime update of the system
+time, so we are going to shut it down, too, instead of a restart.
+
+You won't have to worry about stopping SSSD. It won't run if everything isn't
+just so.
 
 ```
 sudo service ntp stop
 sudo service smbd stop
 sudo service nmbd stop
 ```
-You won't have to worry about stopping SSSD. It won't run if everything isn't
-just so.
-
 
 ## Delete Samba Databases
 The following commands delete the database files where they are
-likely to be found. Ignore complaints that files cannot be found. That is a
-good thing.
+likely to be found. Ignore complaints that files cannot be found. It's not an
+issue.
 
 ```
 sudo rm /var/lib/samba/*.tdb
@@ -217,9 +221,91 @@ sudo rm /var/run/samba/*.tdb
 sudo rm /var/run/samba/*.ldb
 sudo rm /var/cache/samba/*.tdb
 sudo rm /var/cache/samba/*.ldb
-sudo rm /var/lib/private/samba/*.tdb
-sudo rm /var/lib/private/samba/*.ldb
+sudo rm /var/lib/samba/private/*.tdb
+sudo rm /var/lib/samba/private/*.ldb
 ```
+
+## Archive the Original Configuration Files
+Most tutorials/guides that we come across suggest making backup copies of the
+default configuration files and then modifying them. For this exercise, our
+experience has been that it is simply better to start from scratch.
+Nevertheless, there is some pretty handy documentation and examples in the
+default configuration files, so it is worth archiving them for later reference.
+
+The $ARCHIVES variable was set above and is the path to where the files will be
+moved.
+
+```
+sudo mv /etc/ntp.conf $ARCHIVES
+sudo mv /etc/samba/smb.conf $ARCHIVES
+sudo cp /etc/pam.d/common-session $ARCHIVES
+```
+
+## Configure Time
+Sufficiently synchornized time is essential for successful Kerberos
+authentication.
+
+> To prevent "replay attacks," the Kerberos v5 protocol uses time stamps as
+> part of its protocol definition. For time stamps to work properly, the clocks
+> of the client and the domain controller need to be in sync as much as
+> possible. In other words, both computers must be set to the same time and
+> date. [Maximum tolerance for computer clock synchronization]
+> (https://technet.microsoft.com/en-us/library/jj852172(v=ws.11).aspx)
+
+While there is not a strict requirement that the time be accurate, the time on
+the client and server must be sufficiently close to permit a successful
+authentication. That said, our users generally like for their clocks to be
+accurate, too.
+
+There are a variety of ways that these two objectives can be accomplished. Our
+domain controllers are configured to sync against an external, authoritative
+time source. We then sync all client machines agains the server. The [official
+Ubuntu documentation](https://help.ubuntu.com/lts/serverguide/NTP.html "Time
+Synchronisation") is an excellent place to start for exploring additional
+options.
+
+### Disable timesyncd
+By default, Ubuntu relies on timesyncd to maintain system time, which does
+essentially the same thing as ntpd. The latter tends to be significantly more
+graceful, though, and therefore friendlier to applications sensitive to
+peturbations in time.
+
+```
+sudo timedatectl set-ntp no
+```
+
+**Be warned.** This next command will abruptly update the system clock. If you
+have services running that will hiccup, cough, or die, you may need to
+intercede with them appropriately. Incidentally, the following command will
+only work if you have Windows correctly figured to serve time
+(```dig -t srv _ntp._udp.$DOMAIN```). If you don't, then try replacing
+```$DOMAIN``` with another authoritative server, eg. ```$DC1.$DOMAIN```, or
+pool of servers, such as pool.ntp.org.
+
+```
+sudo ntpdate $DOMAIN
+```
+
+Now, create the NTP configuration file, change the ownership, and move it to
+the ```/etc``` directory. In practical terms, you likely only need one server
+entry here, but we chose redundancy.
+
+```
+# Create configuration file
+cat << NTP > ntp.conf
+server $DOMAIN
+server $DC1.$DOMAIN
+server $DC2.$DOMAIN
+NTP
+
+# Move file
+sudo chown root:root ntp.conf
+sudo mv ntp.conf /etc
+```
+
+
+
+
 
 
 
